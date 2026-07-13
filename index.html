@@ -9241,10 +9241,19 @@ function filterBuyerGroup(group) {
     return { views, interests, contacted, productCount };
   }
 
-  // ---- 读取 UTM 来源 ----
+  // ---- 读取 UTM 来源（优先级：URL 参数 > localStorage 自报名称）----
   const urlParams = new URLSearchParams(location.search);
   const utmSource = urlParams.get('utm_source') || urlParams.get('from') || '';
-  const utmBuyer = urlParams.get('buyer') || urlParams.get('name') || '';
+  let utmBuyer = urlParams.get('buyer') || urlParams.get('name') || '';
+
+  // 统一链接方案：未带 buyer 参数时，优先用设备上已自报的名字；还没有就弹窗让买手自己填
+  const BUYER_NAME_KEY = 'bk_buyer_self_reported_name';
+  if (!utmBuyer) {
+    utmBuyer = localStorage.getItem(BUYER_NAME_KEY) || '';
+  } else {
+    // URL 带了 buyer 参数时，也同步写入 localStorage，便于之后统一链接仍能识别
+    localStorage.setItem(BUYER_NAME_KEY, utmBuyer);
+  }
 
   // 记录本次访问
   const data = loadData();
@@ -9469,8 +9478,21 @@ function filterBuyerGroup(group) {
     }).catch(() => {});
   }
 
+  // ---- 首次自报姓名弹窗 ----
+  function ensureBuyerName() {
+    if (utmBuyer) return; // 已有名字（URL 或 localStorage），无需弹窗
+    const name = prompt('👋 欢迎来到 bk 货盘！\n\n请输入您的称呼（小红书昵称/微信名都可以），方便我们识别您的意向反馈：', '');
+    if (name && name.trim()) {
+      utmBuyer = name.trim();
+      localStorage.setItem(BUYER_NAME_KEY, utmBuyer);
+    }
+  }
+
   // ---- 主入口 ----
   function init() {
+    // 首次访问且无名字时，弹窗让买手自报
+    ensureBuyerName();
+
     // 只有 ?admin=bk2026 才显示追踪面板
     const isAdmin = new URLSearchParams(location.search).get('admin') === 'bk2026';
     if (isAdmin) {
